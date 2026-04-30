@@ -1,51 +1,120 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <title>LIVE CLM CHRONO</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <meta charset="UTF-8">
+    <title>LIVE CHRONO - CLM</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; }
-        #classement { width: 80%; margin: auto; border-collapse: collapse; font-size: 24px; }
-        th, td { border-bottom: 1px solid #444; padding: 15px; }
-        .leader { color: #00ff00; font-weight: bold; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a1a; color: white; margin: 20px; }
+        h1 { text-align: center; color: #00ff00; text-transform: uppercase; }
+        
+        /* Bandeau dernier arrivant */
+        #last-arrival {
+            background: #000;
+            border: 2px solid #00ff00;
+            padding: 15px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffff00;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            min-height: 40px;
+        }
+
+        /* Tableau de classement */
+        table { width: 100%; border-collapse: collapse; background: #2d2d2d; font-size: 18px; }
+        th { background-color: #444; color: #00ff00; padding: 12px; text-align: left; border-bottom: 2px solid #555; }
+        td { padding: 10px; border-bottom: 1px solid #444; }
+        tr:nth-child(even) { background-color: #333; }
+        tr:first-child { background-color: rgba(0, 255, 0, 0.1); font-weight: bold; }
+        .rank { width: 50px; text-align: center; color: #aaa; }
+        .time { font-family: monospace; color: #00ff00; }
+        .diff { font-family: monospace; color: #ff9900; font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <h1>CHRONO LIVE - RÉSULTATS</h1>
-    <div id="status">Connexion au broker...</div>
-    <table id="classement">
+
+    <h1>Classement Live - KBA 2026</h1>
+
+    <div id="last-arrival">EN ATTENTE DU PREMIER TOP...</div>
+
+    <table>
         <thead>
             <tr>
-                <th>Rang</th><th>Dossard</th><th>Nom</th><th>Club</th><th>Temps</th><th>Écart</th>
+                <th class="rank">Pos</th>
+                <th>Dossard</th>
+                <th>Nom</th>
+                <th>Club</th>
+                <th>Temps</th>
+                <th>Écart</th>
             </tr>
         </thead>
-        <tbody id="result-body">
-            <!-- Les résultats s'afficheront ici -->
+        <tbody id="classement-body">
+            <!-- Les lignes s'ajouteront ici ici -->
         </tbody>
     </table>
 
     <script>
-        // CONFIGURATION - DOIT CORRESPONDRE AU LOGICIEL
-        // Remplacez 'Nom_De_Votre_Course' par le nom du fichier .db (sans le .db)
-        const topic = "clm_chrono/+/live"; 
-        const client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "web_client_" + Math.random());
+        // --- CONFIGURATION ---
+        // ATTENTION : Ce topic doit être EXACTEMENT le même que dans ton code C#
+        // Par défaut dans le dernier code envoyé : "clm_chrono/Course_Defaut/live"
+        // Si tu as nommé ton fichier "KBA_2026.db", le topic est : "clm_chrono/KBA_2026/live"
+        const TOPIC = "clm_chrono/+/live"; 
+        const BROKER = "wss://broker.hivemq.com:8884/mqtt";
 
-        client.onMessageArrived = (message) => {
-            const data = message.payloadString.split('|');
+        const client = mqtt.connect(BROKER);
+        let classement = [];
+
+        client.on('connect', () => {
+            console.log("Connecté au Live MQTT");
+            client.subscribe(TOPIC);
+        });
+
+        client.on('message', (topic, message) => {
+            const data = message.toString().split('|');
             // Format reçu : Dossard|Nom|Club|Temps|Ecart
-            ajouterLigne(data[0], data[1], data[2], data[3], data[4]);
-        };
+            const coureur = {
+                dossard: data[0],
+                nom: data[1],
+                club: data[2],
+                temps: data[3],
+                ecart: data[4]
+            };
 
-        client.connect({ onSuccess: () => {
-            document.getElementById('status').innerText = "Connecté au Live !";
-            client.subscribe(topic);
-        }});
+            // Mise à jour du bandeau
+            document.getElementById('last-arrival').innerText = 
+                `DERNIER ARRIVÉ : ${coureur.nom} - ${coureur.temps}`;
 
-        function ajouterLigne(dossard, nom, club, temps, ecart) {
-            const body = document.getElementById('result-body');
-            const row = body.insertRow(0); // Ajoute en haut
-            if(ecart === "LEADER") row.className = "leader";
-            row.innerHTML = `<td>-</td><td>${dossard}</td><td>${nom}</td><td>${club}</td><td>${temps}</td><td>${ecart}</td>`;
+            // Mise à jour de la liste locale (on remplace si le dossard existe déjà)
+            const index = classement.findIndex(c => c.dossard === coureur.dossard);
+            if (index !== -1) {
+                classement[index] = coureur;
+            } else {
+                classement.push(coureur);
+            }
+
+            // Tri par temps
+            classement.sort((a, b) => a.temps.localeCompare(b.temps));
+
+            renderTable();
+        });
+
+        function renderTable() {
+            const body = document.getElementById('classement-body');
+            body.innerHTML = "";
+
+            classement.forEach((c, i) => {
+                const row = `<tr>
+                    <td class="rank">${i + 1}</td>
+                    <td>${c.dossard}</td>
+                    <td>${c.nom}</td>
+                    <td>${c.club}</td>
+                    <td class="time">${c.temps}</td>
+                    <td class="diff">${c.ecart}</td>
+                </tr>`;
+                body.innerHTML += row;
+            });
         }
     </script>
 </body>
