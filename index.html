@@ -2,46 +2,33 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>LIVE KBA 2026</title>
+    <title>LIVE CHRONO</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a1a; color: white; margin: 20px; }
-        h1 { text-align: center; color: #00ff00; }
-        
         #last-arrival {
-            background: #000;
-            border: 2px solid #00ff00;
-            padding: 20px;
-            text-align: center;
-            border-radius: 10px;
-            margin-bottom: 25px;
+            background: #000; border: 2px solid #00ff00; padding: 20px;
+            text-align: center; border-radius: 10px; margin-bottom: 25px;
         }
-
-        .b-name { font-size: 32px; font-weight: bold; display: block; }
-        .b-time { font-size: 40px; color: #00ff00; font-family: monospace; }
-        .b-gap { font-size: 24px; color: #ff9900; font-weight: bold; margin-left: 15px; }
-
+        .b-name { font-size: 28px; font-weight: bold; display: block; }
+        .b-time { font-size: 36px; color: #00ff00; font-family: monospace; }
+        .b-gap { font-size: 22px; color: #ff9900; margin-left: 15px; }
         table { width: 100%; border-collapse: collapse; background: #2d2d2d; }
         th { background-color: #444; color: #00ff00; padding: 12px; text-align: left; }
         td { padding: 10px; border-bottom: 1px solid #444; }
-        .rank { width: 50px; text-align: center; font-weight: bold; }
-        .time { font-family: monospace; color: #00ff00; }
-        .diff { font-family: monospace; color: #ff9900; }
+        .time, .diff { font-family: monospace; }
     </style>
 </head>
 <body>
 
-    <h1>LIVE KBA 2026</h1>
-
     <div id="last-arrival">
-        <span class="b-name">EN ATTENTE...</span>
-        <span class="b-time">--:--:--.---</span>
+        <span class="b-name">EN ATTENTE DU PREMIER TOP...</span>
     </div>
 
     <table>
         <thead>
             <tr>
-                <th class="rank">Pos</th>
+                <th>Pos</th>
                 <th>Dossard</th>
                 <th>Nom</th>
                 <th>Club</th>
@@ -57,59 +44,57 @@
         const BROKER = "wss://broker.hivemq.com:8884/mqtt";
         const client = mqtt.connect(BROKER);
 
-        // Récupération de la mémoire locale
         let classement = JSON.parse(localStorage.getItem('clm_save')) || [];
-
-        window.onload = () => { renderTable(); };
 
         client.on('connect', () => { client.subscribe(TOPIC); });
 
         client.on('message', (topic, message) => {
             const data = message.toString().split('|');
             const coureur = {
-                dossard: data[0],
-                nom: data[1],
-                club: data[2],
-                temps: data[3],
-                ecart: data[4] // L'écart envoyé par le C#
+                dossard: data[0], nom: data[1], club: data[2], temps: data[3], ecart: data[4]
             };
 
-            // MISE À JOUR DU BANDEAU (Nom + Temps + Écart)
-            const affichageEcart = (coureur.ecart === "LEADER") ? "MEILLEUR TEMPS" : "+" + coureur.ecart;
-            document.getElementById('last-arrival').innerHTML = `
-                <span class="b-name">${coureur.nom} (n°${coureur.dossard})</span>
-                <span class="b-time">${coureur.temps}</span>
-                <span class="b-gap">${affichageEcart}</span>
-            `;
-
-            // GESTION DU CLASSEMENT
-            const index = classement.findIndex(c => c.dossard === coureur.dossard);
-            if (index !== -1) {
-                classement[index] = coureur;
+            // Mise à jour de la liste (recherche par dossard)
+            const idx = classement.findIndex(c => c.dossard === coureur.dossard);
+            if (idx !== -1) {
+                classement[idx] = coureur;
             } else {
                 classement.push(coureur);
+                // On ne met à jour le bandeau que si c'est un NOUVEAU message (le dernier arrivé)
+                updateBandeau(coureur);
             }
 
-            // Tri et sauvegarde
+            // Tri automatique par temps
             classement.sort((a, b) => a.temps.localeCompare(b.temps));
             localStorage.setItem('clm_save', JSON.stringify(classement));
-            
             renderTable();
         });
+
+        function updateBandeau(c) {
+            const displayGap = (c.ecart === "LEADER") ? "MEILLEUR TEMPS" : "+" + c.ecart;
+            document.getElementById('last-arrival').innerHTML = `
+                <span class="b-name">${c.nom} (n°${c.dossard})</span>
+                <span class="b-time">${c.temps}</span>
+                <span class="b-gap">${displayGap}</span>
+            `;
+        }
 
         function renderTable() {
             const body = document.getElementById('classement-body');
             body.innerHTML = classement.map((c, i) => `
                 <tr>
-                    <td class="rank">${i + 1}</td>
+                    <td><b>${i + 1}</b></td>
                     <td>${c.dossard}</td>
                     <td>${c.nom}</td>
                     <td>${c.club}</td>
-                    <td class="time">${c.temps}</td>
-                    <td class="diff">${c.ecart === "LEADER" ? "LEADER" : "+" + c.ecart}</td>
+                    <td class="time" style="color:#00ff00">${c.temps}</td>
+                    <td class="diff" style="color:#ff9900">${c.ecart === "LEADER" ? "LEADER" : "+" + c.ecart}</td>
                 </tr>
             `).join('');
         }
+
+        // Affichage initial
+        renderTable();
     </script>
 </body>
 </html>
