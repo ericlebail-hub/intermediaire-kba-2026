@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIVE CHRONO - Résultats</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <style>
+        :root { --primary: #e74c3c; --secondary: #2ecc71; --dark: #121212; --card: #1e1e1e; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white; margin: 0; padding-bottom: 50px; }
+        header { background: #000; padding: 15px; text-align: center; border-bottom: 2px solid var(--primary); position: sticky; top: 0; z-index: 100; }
+        
+        .tabs { display: flex; justify-content: center; background: #222; }
+        .tab { padding: 15px 20px; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.3s; flex: 1; text-align: center; font-weight: bold; }
+        .tab.active { border-bottom: 3px solid var(--primary); color: var(--primary); }
+        
+        .content { display: none; padding: 15px; max-width: 600px; margin: auto; }
+        .content.active { display: block; }
+
+        /* Style des cartes */
+        .card { 
+            background: var(--card); border-radius: 10px; padding: 15px; margin-bottom: 10px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-left: 5px solid #444; animation: fadeIn 0.4s ease;
+        }
+        .card.leader { border-left-color: var(--secondary); }
+        .info { flex-grow: 1; }
+        .nom { font-weight: bold; font-size: 1.1em; }
+        .club { font-size: 0.85em; color: #bbb; }
+        .temps-box { text-align: right; }
+        .temps { font-family: monospace; font-size: 1.2em; color: #f1c40f; display: block; }
+        .ecart { font-size: 0.8em; color: #888; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        #status { font-size: 0.7em; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <strong>CHRONO LIVE</strong>
+    <div id="status">Connexion au serveur...</div>
+</header>
+
+<div class="tabs">
+    <div class="tab active" onclick="showTab('live')">DIRECT</div>
+    <div class="tab" onclick="showTab('classement')">CLASSEMENT</div>
+</div>
+
+<!-- SECTION LIVE -->
+<div id="live" class="content active"></div>
+
+<!-- SECTION CLASSEMENT -->
+<div id="classement" class="content">
+    <p style="text-align: center; color: #666;">Le classement général se construit au fil des arrivées...</p>
+</div>
+
+<script>
+    // CONFIGURATION (Doit correspondre au C#)
+    const topic = 'clm_chrono/votre_course_unique_2024/live';
+    const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
+
+    let coureurs = []; // Stockage pour le classement
+
+    client.on('connect', () => {
+        document.getElementById('status').innerText = "● EN DIRECT";
+        document.getElementById('status').style.color = "#2ecc71";
+        client.subscribe(topic);
+    });
+
+    client.on('message', (t, msg) => {
+        const [dossard, nom, club, temps, ecart] = msg.toString().split('|');
+        
+        // 1. Ajouter au flux LIVE
+        const liveDiv = document.getElementById('live');
+        const card = createCard(dossard, nom, club, temps, ecart);
+        liveDiv.insertBefore(card, liveDiv.firstChild);
+
+        // 2. Mettre à jour la liste CLASSEMENT
+        updateClassement(dossard, nom, club, temps, ecart);
+    });
+
+    function createCard(dossard, nom, club, temps, ecart) {
+        const div = document.createElement('div');
+        div.className = 'card ' + (ecart === 'LEADER' ? 'leader' : '');
+        div.innerHTML = `
+            <div class="info">
+                <div class="nom">#${dossard} ${nom}</div>
+                <div class="club">${club}</div>
+            </div>
+            <div class="temps-box">
+                <span class="temps">${temps}</span>
+                <span class="ecart">${ecart === 'LEADER' ? 'Meilleur Temps' : ecart}</span>
+            </div>
+        `;
+        return div;
+    }
+
+    function updateClassement(dossard, nom, club, temps, ecart) {
+        // Supprimer si le coureur existe déjà (correction)
+        coureurs = coureurs.filter(c => c.dossard !== dossard);
+        coureurs.push({ dossard, nom, club, temps, ecart });
+        
+        // Trier par temps (format hh:mm:ss.fff)
+        coureurs.sort((a, b) => a.temps.localeCompare(b.temps));
+
+        const classDiv = document.getElementById('classement');
+        classDiv.innerHTML = ''; // On vide pour reconstruire proprement
+        
+        coureurs.forEach((c, index) => {
+            const row = createCard(c.dossard, c.nom, c.club, c.temps, index === 0 ? "LEADER" : "Pos: " + (index+1));
+            if (index === 0) row.classList.add('leader');
+            classDiv.appendChild(row);
+        });
+    }
+
+    function showTab(tabId) {
+        document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        event.currentTarget.classList.add('active');
+    }
+</script>
+
+</body>
+</html>
