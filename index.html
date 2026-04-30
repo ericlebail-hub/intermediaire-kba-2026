@@ -84,7 +84,7 @@
 
             // Mise à jour du bandeau
             document.getElementById('last-arrival').innerText = 
-                `DERNIER ARRIVÉ : ${coureur.nom} - ${coureur.temps}`;
+                `DERNIER PASSAGE INTERMEDIAIRE : ${coureur.nom} - ${coureur.temps}`;
 
             // Mise à jour de la liste locale (on remplace si le dossard existe déjà)
             const index = classement.findIndex(c => c.dossard === coureur.dossard);
