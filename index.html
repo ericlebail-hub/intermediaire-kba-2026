@@ -20,6 +20,7 @@
             margin-bottom: 20px;
             border-radius: 8px;
             min-height: 40px;
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.2);
         }
 
         /* Tableau de classement */
@@ -27,7 +28,7 @@
         th { background-color: #444; color: #00ff00; padding: 12px; text-align: left; border-bottom: 2px solid #555; }
         td { padding: 10px; border-bottom: 1px solid #444; }
         tr:nth-child(even) { background-color: #333; }
-        tr:first-child { background-color: rgba(0, 255, 0, 0.1); font-weight: bold; }
+        tr:first-child { background-color: rgba(0, 255, 0, 0.2); font-weight: bold; }
         .rank { width: 50px; text-align: center; color: #aaa; }
         .time { font-family: monospace; color: #00ff00; }
         .diff { font-family: monospace; color: #ff9900; font-size: 0.9em; }
@@ -51,20 +52,28 @@
             </tr>
         </thead>
         <tbody id="classement-body">
-            <!-- Les lignes s'ajouteront ici ici -->
+            <!-- Les lignes s'afficheront ici -->
         </tbody>
     </table>
 
     <script>
         // --- CONFIGURATION ---
-        // ATTENTION : Ce topic doit être EXACTEMENT le même que dans ton code C#
-        // Par défaut dans le dernier code envoyé : "clm_chrono/Course_Defaut/live"
-        // Si tu as nommé ton fichier "KBA_2026.db", le topic est : "clm_chrono/KBA_2026/live"
         const TOPIC = "clm_chrono/+/live"; 
         const BROKER = "wss://broker.hivemq.com:8884/mqtt";
 
         const client = mqtt.connect(BROKER);
-        let classement = [];
+
+        // RÉCUPÉRATION DES DONNÉES AU CHARGEMENT (Persistance)
+        let classement = JSON.parse(localStorage.getItem('clm_backup')) || [];
+
+        // Si on a déjà des données, on les affiche tout de suite
+        if (classement.length > 0) {
+            window.onload = () => {
+                renderTable();
+                // On affiche le dernier de la liste dans le bandeau par défaut au chargement
+                updateBandeau(classement[classement.length - 1]); 
+            };
+        }
 
         client.on('connect', () => {
             console.log("Connecté au Live MQTT");
@@ -73,7 +82,7 @@
 
         client.on('message', (topic, message) => {
             const data = message.toString().split('|');
-            // Format reçu : Dossard|Nom|Club|Temps|Ecart
+            // Format : Dossard|Nom|Club|Temps|Ecart
             const coureur = {
                 dossard: data[0],
                 nom: data[1],
@@ -82,11 +91,10 @@
                 ecart: data[4]
             };
 
-            // Mise à jour du bandeau
-            document.getElementById('last-arrival').innerText = 
-                `DERNIER PASSAGE INTERMEDIAIRE : ${coureur.nom} - ${coureur.temps}`;
+            // 1. Mise à jour du bandeau avec l'écart
+            updateBandeau(coureur);
 
-            // Mise à jour de la liste locale (on remplace si le dossard existe déjà)
+            // 2. Mise à jour de la liste locale
             const index = classement.findIndex(c => c.dossard === coureur.dossard);
             if (index !== -1) {
                 classement[index] = coureur;
@@ -94,11 +102,21 @@
                 classement.push(coureur);
             }
 
-            // Tri par temps
+            // 3. Tri par temps
             classement.sort((a, b) => a.temps.localeCompare(b.temps));
 
+            // 4. Sauvegarde dans le navigateur
+            localStorage.setItem('clm_backup', JSON.stringify(classement));
+
+            // 5. Rafraîchissement du tableau
             renderTable();
         });
+
+        function updateBandeau(c) {
+            const labelEcart = (c.ecart === "LEADER") ? "MEILLEUR TEMPS" : `ÉCART : ${c.ecart}`;
+            document.getElementById('last-arrival').innerHTML = 
+                `DERNIER PASSAGE : ${c.nom} <br> <span style="color:#00ff00">${c.temps}</span> — <span style="color:#ff9900">${labelEcart}</span>`;
+        }
 
         function renderTable() {
             const body = document.getElementById('classement-body');
