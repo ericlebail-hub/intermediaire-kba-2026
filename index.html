@@ -50,22 +50,30 @@
 
         client.on('message', (topic, message) => {
             const data = message.toString().split('|');
+            if (data.length < 5) return;
+
             const coureur = {
-                dossard: data[0], nom: data[1], club: data[2], temps: data[3], ecart: data[4]
+                dossard: data[0].trim(),
+                nom: data[1].trim(),
+                club: data[2].trim(),
+                temps: data[3].trim().replace(',', '.'), // On uniformise le séparateur décimal
+                ecart: data[4].trim()
             };
 
-            // Mise à jour de la liste (recherche par dossard)
             const idx = classement.findIndex(c => c.dossard === coureur.dossard);
             if (idx !== -1) {
                 classement[idx] = coureur;
             } else {
                 classement.push(coureur);
-                // On ne met à jour le bandeau que si c'est un NOUVEAU message (le dernier arrivé)
                 updateBandeau(coureur);
             }
 
-            // Tri automatique par temps
-            classement.sort((a, b) => a.temps.localeCompare(b.temps));
+            // --- TRI ROBUSTE ---
+            // On s'assure que "01:00:00" et "1:00:00" soient comparés correctement
+            classement.sort((a, b) => {
+                return a.temps.padStart(12, '0').localeCompare(b.temps.padStart(12, '0'));
+            });
+
             localStorage.setItem('clm_save', JSON.stringify(classement));
             renderTable();
         });
@@ -93,7 +101,6 @@
             `).join('');
         }
 
-        // Affichage initial
         renderTable();
     </script>
 </body>
