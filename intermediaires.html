@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <title>LIVE PK1 / PK2 – BZH PAR EQUIPE U19H</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+
+    <!-- Script MQTT local (pas de CDN → pas de blocage Edge) -->
+    <script src="mqtt.min.js"></script>
 
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a1a; color: white; margin: 20px; }
 
-        /* Onglets */
         .tabs { display: flex; margin-bottom: 20px; }
         .tab {
             padding: 12px 25px;
@@ -20,7 +21,6 @@
         }
         .tab.active { background: #00aaff; }
 
-        /* Bandeaux */
         .bandeau {
             background: #000; border: 2px solid #00aaff; padding: 20px;
             text-align: center; border-radius: 10px; margin-bottom: 25px;
@@ -28,7 +28,6 @@
         .b-name { font-size: 28px; font-weight: bold; display: block; }
         .b-time { font-size: 36px; color: #00aaff; font-family: monospace; }
 
-        /* Tableaux */
         table { width: 100%; border-collapse: collapse; background: #2d2d2d; }
         th { background-color: #444; color: #00aaff; padding: 12px; text-align: left; }
         td { padding: 10px; border-bottom: 1px solid #444; }
@@ -87,10 +86,13 @@
     </div>
 
     <script>
-        const COURSE = "BZH_PAR_EQUIPE_U19H";   // 🔥 TON NOM EXACT DE COURSE
-        const BROKER = "wss://broker.hivemq.com:8884/mqtt";
+        const COURSE = "BZH_PAR_EQUIPE_U19H";
 
-        const client = mqtt.connect(BROKER);
+        // 🔥 Broker WebSocket FIABLE
+        const BROKER = "wss://broker.emqx.io:8084/mqtt";
+
+        let client;
+        let reconnectTimer = null;
 
         const TOPIC_PK1 = `clm_chrono/${COURSE}/pk1`;
         const TOPIC_PK2 = `clm_chrono/${COURSE}/pk2`;
@@ -98,28 +100,87 @@
         let pk1 = [];
         let pk2 = [];
 
-        client.on('connect', () => {
-            client.subscribe(TOPIC_PK1);
-            client.subscribe(TOPIC_PK2);
-        });
+        // 🔥 Indicateur CONNECTÉ / DÉCONNECTÉ
+        const statusDiv = document.createElement("div");
+        statusDiv.style.position = "fixed";
+        statusDiv.style.top = "10px";
+        statusDiv.style.right = "10px";
+        statusDiv.style.padding = "8px 14px";
+        statusDiv.style.borderRadius = "6px";
+        statusDiv.style.fontWeight = "bold";
+        statusDiv.style.background = "#444";
+        statusDiv.style.color = "white";
+        statusDiv.innerText = "Connexion...";
+        document.body.appendChild(statusDiv);
 
-        client.on('message', (topic, message) => {
-            let data;
-            try { data = JSON.parse(message.toString()); }
-            catch { return; }
+        function updateStatus(connected) {
+            if (connected) {
+                statusDiv.style.background = "#0a0";
+                statusDiv.innerText = "CONNECTÉ";
+            } else {
+                statusDiv.style.background = "#a00";
+                statusDiv.innerText = "DÉCONNECTÉ – reconnexion...";
+            }
+        }
 
-            if (!data.dossard || !data.temps) return;
+        // 🔥 Connexion MQTT robuste
+        function connectMqtt() {
+            updateStatus(false);
 
-            const coureur = {
-                dossard: data.dossard,
-                nom: data.nom,
-                club: data.club,
-                temps: data.temps
-            };
+            client = mqtt.connect(BROKER, {
+                reconnectPeriod: 0,
+                connectTimeout: 4000
+            });
 
-            if (topic.includes("/pk1")) updatePK(pk1, coureur, "pk1");
-            if (topic.includes("/pk2")) updatePK(pk2, coureur, "pk2");
-        });
+            client.on("connect", () => {
+                updateStatus(true);
+                console.log("MQTT connecté");
+
+                client.subscribe(TOPIC_PK1);
+                client.subscribe(TOPIC_PK2);
+
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
+            });
+
+            client.on("error", () => {
+                updateStatus(false);
+                scheduleReconnect();
+            });
+
+            client.on("close", () => {
+                updateStatus(false);
+                scheduleReconnect();
+            });
+
+            client.on("message", (topic, message) => {
+                let data;
+                try { data = JSON.parse(message.toString()); }
+                catch { return; }
+
+                if (!data.dossard || !data.temps) return;
+
+                const coureur = {
+                    dossard: data.dossard,
+                    nom: data.nom,
+                    club: data.club,
+                    temps: data.temps
+                };
+
+                if (topic.includes("/pk1")) updatePK(pk1, coureur, "pk1");
+                if (topic.includes("/pk2")) updatePK(pk2, coureur, "pk2");
+            });
+        }
+
+        function scheduleReconnect() {
+            if (!reconnectTimer) {
+                reconnectTimer = setTimeout(connectMqtt, 3000);
+            }
+        }
+
+        connectMqtt();
 
         function updatePK(list, coureur, point) {
             const idx = list.findIndex(c => c.dossard === coureur.dossard);
@@ -169,3 +230,4 @@
 
 </body>
 </html>
+
