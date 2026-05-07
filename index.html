@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>LIVE CHRONO</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a1a; color: white; margin: 20px; }
         #last-arrival {
@@ -19,6 +20,7 @@
         .time, .diff { font-family: monospace; }
     </style>
 </head>
+
 <body>
 
     <div id="last-arrival">
@@ -40,39 +42,54 @@
     </table>
 
     <script>
-        const TOPIC = "clm_chrono/+/live"; 
+        // 🔥 NOUVEAU LIVE JSON
+        const TOPICS = [
+            "clm_chrono/+/pk1",
+            "clm_chrono/+/pk2",
+            "clm_chrono/+/arrivee"
+        ];
+
         const BROKER = "wss://broker.hivemq.com:8884/mqtt";
         const client = mqtt.connect(BROKER);
 
         let classement = JSON.parse(localStorage.getItem('clm_save')) || [];
 
-        client.on('connect', () => { client.subscribe(TOPIC); });
+        client.on('connect', () => {
+            TOPICS.forEach(t => client.subscribe(t));
+        });
 
         client.on('message', (topic, message) => {
-            const data = message.toString().split('|');
-            if (data.length < 5) return;
+            let data;
+            try {
+                data = JSON.parse(message.toString());
+            } catch {
+                return;
+            }
+
+            if (!data.dossard || !data.temps) return;
 
             const coureur = {
-                dossard: data[0].trim(),
-                nom: data[1].trim(),
-                club: data[2].trim(),
-                temps: data[3].trim().replace(',', '.'), // On uniformise le séparateur décimal
-                ecart: data[4].trim()
+                dossard: data.dossard,
+                nom: data.nom,
+                club: data.club,
+                temps: data.temps,
+                ecart: data.ecart || "",
+                point: data.point
             };
 
+            // Mise à jour ou ajout
             const idx = classement.findIndex(c => c.dossard === coureur.dossard);
             if (idx !== -1) {
                 classement[idx] = coureur;
             } else {
                 classement.push(coureur);
-                updateBandeau(coureur);
+                if (coureur.point === "ARRIVEE") updateBandeau(coureur);
             }
 
-            // --- TRI ROBUSTE ---
-            // On s'assure que "01:00:00" et "1:00:00" soient comparés correctement
-            classement.sort((a, b) => {
-                return a.temps.padStart(12, '0').localeCompare(b.temps.padStart(12, '0'));
-            });
+            // Tri robuste
+            classement.sort((a, b) =>
+                a.temps.padStart(12, '0').localeCompare(b.temps.padStart(12, '0'))
+            );
 
             localStorage.setItem('clm_save', JSON.stringify(classement));
             renderTable();
@@ -103,5 +120,7 @@
 
         renderTable();
     </script>
+
 </body>
 </html>
+
