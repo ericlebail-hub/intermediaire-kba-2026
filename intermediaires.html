@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>LIVE PK1 / PK2 – BZH PAR EQUIPE U19H</title>
 
-    <!-- Script MQTT local (pas de CDN → pas de blocage Edge) -->
+    <!-- Script MQTT local -->
     <script src="mqtt.min.js"></script>
 
     <style>
@@ -26,11 +26,11 @@
             text-align: center; border-radius: 10px; margin-bottom: 25px;
         }
         .b-name { font-size: 28px; font-weight: bold; display: block; }
-        .b-time { font-size: 36px; color: #00aaff; font-family: monospace; }
+        .b-time { font-size: 32px; color: #00aaff; font-family: monospace; }
 
         table { width: 100%; border-collapse: collapse; background: #2d2d2d; }
-        th { background-color: #444; color: #00aaff; padding: 12px; text-align: left; }
-        td { padding: 10px; border-bottom: 1px solid #444; }
+        th { background-color: #444; color: #00aaff; padding: 10px; text-align: left; }
+        td { padding: 8px; border-bottom: 1px solid #444; }
         .time { font-family: monospace; color: #00aaff; }
 
         .hidden { display: none; }
@@ -57,8 +57,8 @@
                     <th>Pos</th>
                     <th>Dossard</th>
                     <th>Nom</th>
-                    <th>Club</th>
-                    <th>PK1</th>
+                    <th>Temps brut</th>
+                    <th>Écart</th>
                 </tr>
             </thead>
             <tbody id="table-pk1"></tbody>
@@ -77,8 +77,8 @@
                     <th>Pos</th>
                     <th>Dossard</th>
                     <th>Nom</th>
-                    <th>Club</th>
-                    <th>PK2</th>
+                    <th>Temps brut</th>
+                    <th>Écart</th>
                 </tr>
             </thead>
             <tbody id="table-pk2"></tbody>
@@ -87,20 +87,18 @@
 
     <script>
         const COURSE = "BZH_PAR_EQUIPE_U19H";
-
-        // 🔥 Broker WebSocket FIABLE
         const BROKER = "wss://broker.emqx.io:8084/mqtt";
-
-        let client;
-        let reconnectTimer = null;
 
         const TOPIC_PK1 = `clm_chrono/${COURSE}/pk1`;
         const TOPIC_PK2 = `clm_chrono/${COURSE}/pk2`;
 
+        let client;
+        let reconnectTimer = null;
+
         let pk1 = [];
         let pk2 = [];
 
-        // 🔥 Indicateur CONNECTÉ / DÉCONNECTÉ
+        // Indicateur CONNECTÉ / DÉCONNECTÉ
         const statusDiv = document.createElement("div");
         statusDiv.style.position = "fixed";
         statusDiv.style.top = "10px";
@@ -123,7 +121,6 @@
             }
         }
 
-        // 🔥 Connexion MQTT robuste
         function connectMqtt() {
             updateStatus(false);
 
@@ -134,8 +131,6 @@
 
             client.on("connect", () => {
                 updateStatus(true);
-                console.log("MQTT connecté");
-
                 client.subscribe(TOPIC_PK1);
                 client.subscribe(TOPIC_PK2);
 
@@ -160,13 +155,27 @@
                 try { data = JSON.parse(message.toString()); }
                 catch { return; }
 
+                // Suppression
+                if (data.delete === true) {
+                    if (topic.includes("/pk1")) {
+                        pk1 = pk1.filter(c => c.dossard !== data.dossard);
+                        renderTable("pk1");
+                    }
+                    if (topic.includes("/pk2")) {
+                        pk2 = pk2.filter(c => c.dossard !== data.dossard);
+                        renderTable("pk2");
+                    }
+                    return;
+                }
+
                 if (!data.dossard || !data.temps) return;
 
                 const coureur = {
                     dossard: data.dossard,
-                    nom: data.nom,
-                    club: data.club,
-                    temps: data.temps
+                    nom: data.nom || "",
+                    club: data.club || "",
+                    temps: data.temps,
+                    ecart: data.ecart || "+00:00:00.000"
                 };
 
                 if (topic.includes("/pk1")) updatePK(pk1, coureur, "pk1");
@@ -184,12 +193,14 @@
 
         function updatePK(list, coureur, point) {
             const idx = list.findIndex(c => c.dossard === coureur.dossard);
-            if (idx !== -1) list[idx] = coureur;
-            else {
+            if (idx !== -1) {
+                list[idx] = coureur;
+            } else {
                 list.push(coureur);
                 updateBandeau(point, coureur);
             }
 
+            // Tri par temps brut (string hh:mm:ss.fff → tri lexicographique OK)
             list.sort((a, b) =>
                 a.temps.padStart(12, '0').localeCompare(b.temps.padStart(12, '0'))
             );
@@ -200,7 +211,7 @@
         function updateBandeau(point, c) {
             document.getElementById(`bandeau-${point}`).innerHTML = `
                 <span class="b-name">${c.nom} (n°${c.dossard})</span>
-                <span class="b-time">${c.temps}</span>
+                <span class="b-time">${c.temps} — ${c.ecart}</span>
             `;
         }
 
@@ -213,8 +224,8 @@
                     <td><b>${i + 1}</b></td>
                     <td>${c.dossard}</td>
                     <td>${c.nom}</td>
-                    <td>${c.club}</td>
                     <td class="time">${c.temps}</td>
+                    <td class="time">${c.ecart}</td>
                 </tr>
             `).join('');
         }
@@ -230,4 +241,5 @@
 
 </body>
 </html>
+
 
