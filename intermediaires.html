@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>LIVE PK1 / PK2 – BZH PAR EQUIPE U19H</title>
 
-    <!-- Script MQTT local -->
     <script src="mqtt.min.js"></script>
 
     <style>
@@ -39,13 +38,11 @@
 
 <body>
 
-    <!-- ONGLETES -->
     <div class="tabs">
         <div class="tab active" onclick="showTab('pk1')">PK1</div>
         <div class="tab" onclick="showTab('pk2')">PK2</div>
     </div>
 
-    <!-- PK1 -->
     <div id="pk1" class="tab-content">
         <div id="bandeau-pk1" class="bandeau">
             <span class="b-name">EN ATTENTE DU PREMIER PASSAGE PK1...</span>
@@ -65,7 +62,6 @@
         </table>
     </div>
 
-    <!-- PK2 -->
     <div id="pk2" class="tab-content hidden">
         <div id="bandeau-pk2" class="bandeau" style="border-color:#ffaa00;">
             <span class="b-name">EN ATTENTE DU PREMIER PASSAGE PK2...</span>
@@ -98,7 +94,6 @@
         let pk1 = [];
         let pk2 = [];
 
-        // Indicateur CONNECTÉ / DÉCONNECTÉ
         const statusDiv = document.createElement("div");
         statusDiv.style.position = "fixed";
         statusDiv.style.top = "10px";
@@ -155,7 +150,6 @@
                 try { data = JSON.parse(message.toString()); }
                 catch { return; }
 
-                // Suppression
                 if (data.delete === true) {
                     if (topic.includes("/pk1")) {
                         pk1 = pk1.filter(c => c.dossard !== data.dossard);
@@ -200,7 +194,6 @@
                 updateBandeau(point, coureur);
             }
 
-            // Tri par temps brut (string hh:mm:ss.fff → tri lexicographique OK)
             list.sort((a, b) =>
                 a.temps.padStart(12, '0').localeCompare(b.temps.padStart(12, '0'))
             );
@@ -241,5 +234,6 @@
 
 </body>
 </html>
+
 
 
