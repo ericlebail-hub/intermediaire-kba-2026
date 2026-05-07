@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>LIVE PK1 / PK2</title>
+    <title>LIVE PK1 / PK2 – BZH PAR EQUIPE U19H</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
 
     <style>
@@ -87,11 +87,13 @@
     </div>
 
     <script>
+        const COURSE = "BZH_PAR_EQUIPE_U19H";   // 🔥 TON NOM EXACT DE COURSE
         const BROKER = "wss://broker.hivemq.com:8884/mqtt";
+
         const client = mqtt.connect(BROKER);
 
-        const TOPIC_PK1 = "clm_chrono/+/pk1";
-        const TOPIC_PK2 = "clm_chrono/+/pk2";
+        const TOPIC_PK1 = `clm_chrono/${COURSE}/pk1`;
+        const TOPIC_PK2 = `clm_chrono/${COURSE}/pk2`;
 
         let pk1 = [];
         let pk2 = [];
