@@ -150,6 +150,18 @@
                 try { data = JSON.parse(message.toString()); }
                 catch { return; }
 
+                if (data.type === "full") {
+                    if (topic.includes("/pk1")) {
+                        pk1 = data.data;
+                        renderTable("pk1");
+                    }
+                    if (topic.includes("/pk2")) {
+                        pk2 = data.data;
+                        renderTable("pk2");
+                    }
+                    return;
+                    }
+
                 if (data.delete === true) {
                     if (topic.includes("/pk1")) {
                         pk1 = pk1.filter(c => c.dossard !== data.dossard);
