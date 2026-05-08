@@ -82,167 +82,167 @@
     </div>
 
     <script>
-        const COURSE = "BZH_PAR_EQUIPE_U19H";
-        const BROKER = "wss://broker.emqx.io:8084/mqtt";
+    const COURSE = "BZH_PAR_EQUIPE_U19H";
+    const BROKER = "wss://broker.emqx.io:8084/mqtt";
 
-        const TOPIC_PK1 = `clm_chrono/${COURSE}/pk1`;
-        const TOPIC_PK2 = `clm_chrono/${COURSE}/pk2`;
+    const TOPIC_PK1 = `clm_chrono/${COURSE}/pk1`;
+    const TOPIC_PK2 = `clm_chrono/${COURSE}/pk2`;
 
-        let client;
-        let reconnectTimer = null;
+    let client;
+    let reconnectTimer = null;
 
-        let pk1 = [];
-        let pk2 = [];
+    let pk1 = [];
+    let pk2 = [];
 
-        const statusDiv = document.createElement("div");
-        statusDiv.style.position = "fixed";
-        statusDiv.style.top = "10px";
-        statusDiv.style.right = "10px";
-        statusDiv.style.padding = "8px 14px";
-        statusDiv.style.borderRadius = "6px";
-        statusDiv.style.fontWeight = "bold";
-        statusDiv.style.background = "#444";
-        statusDiv.style.color = "white";
-        statusDiv.innerText = "Connexion...";
-        document.body.appendChild(statusDiv);
+    const statusDiv = document.createElement("div");
+    statusDiv.style.position = "fixed";
+    statusDiv.style.top = "10px";
+    statusDiv.style.right = "10px";
+    statusDiv.style.padding = "8px 14px";
+    statusDiv.style.borderRadius = "6px";
+    statusDiv.style.fontWeight = "bold";
+    statusDiv.style.background = "#444";
+    statusDiv.style.color = "white";
+    statusDiv.innerText = "Connexion...";
+    document.body.appendChild(statusDiv);
 
-        function updateStatus(connected) {
-            if (connected) {
-                statusDiv.style.background = "#0a0";
-                statusDiv.innerText = "CONNECTÉ";
-            } else {
-                statusDiv.style.background = "#a00";
-                statusDiv.innerText = "DÉCONNECTÉ – reconnexion...";
-            }
+    function updateStatus(connected) {
+        if (connected) {
+            statusDiv.style.background = "#0a0";
+            statusDiv.innerText = "CONNECTÉ";
+        } else {
+            statusDiv.style.background = "#a00";
+            statusDiv.innerText = "DÉCONNECTÉ – reconnexion...";
         }
+    }
 
-        function connectMqtt() {
+    function connectMqtt() {
+        updateStatus(false);
+
+        client = mqtt.connect(BROKER, {
+            reconnectPeriod: 0,
+            connectTimeout: 4000
+        });
+
+        client.on("connect", () => {
+            updateStatus(true);
+            client.subscribe(TOPIC_PK1);
+            client.subscribe(TOPIC_PK2);
+
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+        });
+
+        client.on("error", () => {
             updateStatus(false);
+            scheduleReconnect();
+        });
 
-            client = mqtt.connect(BROKER, {
-                reconnectPeriod: 0,
-                connectTimeout: 4000
-            });
+        client.on("close", () => {
+            updateStatus(false);
+            scheduleReconnect();
+        });
 
-            client.on("connect", () => {
-                updateStatus(true);
-                client.subscribe(TOPIC_PK1);
-                client.subscribe(TOPIC_PK2);
+        client.on("message", (topic, message) => {
+            let data;
+            try { data = JSON.parse(message.toString()); }
+            catch { return; }
 
-                if (reconnectTimer) {
-                    clearTimeout(reconnectTimer);
-                    reconnectTimer = null;
-                }
-            });
-
-            client.on("error", () => {
-                updateStatus(false);
-                scheduleReconnect();
-            });
-
-            client.on("close", () => {
-                updateStatus(false);
-                scheduleReconnect();
-            });
-
-            client.on("message", (topic, message) => {
-                let data;
-                try { data = JSON.parse(message.toString()); }
-                catch { return; }
-
-                if (data.type === "full") {
-                    if (topic.includes("/pk1")) {
-                        pk1 = data.data;
-                        renderTable("pk1");
-                    }
-                    if (topic.includes("/pk2")) {
-                        pk2 = data.data;
-                        renderTable("pk2");
-                    }
-                    return;
-                    }
-
-                if (data.delete === true) {
-                    if (topic.includes("/pk1")) {
-                        pk1 = pk1.filter(c => c.dossard !== data.dossard);
-                        renderTable("pk1");
-                    }
-                    if (topic.includes("/pk2")) {
-                        pk2 = pk2.filter(c => c.dossard !== data.dossard);
-                        renderTable("pk2");
-                    }
-                    return;
-                }
-
-                if (!data.dossard || !data.temps) return;
-
-                const coureur = {
-                    dossard: data.dossard,
-                    nom: data.nom || "",
-                    club: data.club || "",
-                    temps: data.temps,
-                    ecart: data.ecart || "+00:00:00.000"
-                };
-
-                if (topic.includes("/pk1")) updatePK(pk1, coureur, "pk1");
-                if (topic.includes("/pk2")) updatePK(pk2, coureur, "pk2");
-            });
-        }
-
-        function scheduleReconnect() {
-            if (!reconnectTimer) {
-                reconnectTimer = setTimeout(connectMqtt, 3000);
-            }
-        }
-
-        connectMqtt();
-
-        function updatePK(list, coureur, point) {
-            const idx = list.findIndex(c => c.dossard === coureur.dossard);
-            if (idx !== -1) {
-                list[idx] = coureur;
-            } else {
-                list.push(coureur);
-                updateBandeau(point, coureur);
+            // -------------------------------
+            // MESSAGE "LAST"
+            // -------------------------------
+            if (data.type === "last") {
+                updateBandeau(data);
+                return;
             }
 
-            list.sort((a, b) =>
-                a.temps.padStart(12, '0').localeCompare(b.temps.padStart(12, '0'))
-            );
+            // -------------------------------
+            // MESSAGE "FULL"
+            // -------------------------------
+            if (data.type === "full") {
+                if (topic.includes("/pk1")) {
+                    pk1 = data.data;
+                    renderTable("pk1");
+                }
+                if (topic.includes("/pk2")) {
+                    pk2 = data.data;
+                    renderTable("pk2");
+                }
+                return;
+            }
 
-            renderTable(point);
+            // -------------------------------
+            // MESSAGE "DELETE"
+            // -------------------------------
+            if (data.delete === true) {
+                if (topic.includes("/pk1")) {
+                    pk1 = pk1.filter(c => c.dossard !== data.dossard);
+                    renderTable("pk1");
+                }
+                if (topic.includes("/pk2")) {
+                    pk2 = pk2.filter(c => c.dossard !== data.dossard);
+                    renderTable("pk2");
+                }
+                return;
+            }
+        });
+    }
+
+    function scheduleReconnect() {
+        if (!reconnectTimer) {
+            reconnectTimer = setTimeout(connectMqtt, 3000);
         }
+    }
 
-        function updateBandeau(point, c) {
-            document.getElementById(`bandeau-${point}`).innerHTML = `
-                <span class="b-name">${c.nom} (n°${c.dossard})</span>
-                <span class="b-time">${c.temps} — ${c.ecart}</span>
-            `;
-        }
+    connectMqtt();
 
-        function renderTable(point) {
-            const list = point === "pk1" ? pk1 : pk2;
-            const body = document.getElementById(`table-${point}`);
+    // ============================================================
+    // BANDEAUX
+    // ============================================================
 
-            body.innerHTML = list.map((c, i) => `
-                <tr>
-                    <td><b>${i + 1}</b></td>
-                    <td>${c.dossard}</td>
-                    <td>${c.nom}</td>
-                    <td class="time">${c.temps}</td>
-                    <td class="time">${c.ecart}</td>
-                </tr>
-            `).join('');
-        }
+    function updateBandeau(data) {
+        const point = data.point.toLowerCase();
+        const div = document.getElementById(`bandeau-${point}`);
 
-        function showTab(tab) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        div.innerHTML = `
+            <span class="b-name">${data.nom} (n°${data.dossard})</span>
+            <span class="b-time">${data.temps} — ${data.ecart}</span>
+        `;
+    }
 
-            document.querySelector(`.tab[onclick="showTab('${tab}')"]`).classList.add('active');
-            document.getElementById(tab).classList.remove('hidden');
-        }
-    </script>
+    // ============================================================
+    // TABLEAUX PK1 / PK2
+    // ============================================================
+
+    function renderTable(point) {
+        const list = point === "pk1" ? pk1 : pk2;
+        const body = document.getElementById(`table-${point}`);
+
+        body.innerHTML = list.map((c, i) => `
+            <tr class="${c.highlight ? 'highlight' : ''}">
+                <td><b>${i + 1}</b></td>
+                <td>${c.dossard}</td>
+                <td>${c.nom}</td>
+                <td class="time">${c.temps}</td>
+                <td class="time">${c.ecart}</td>
+            </tr>
+        `).join('');
+    }
+
+    // ============================================================
+    // ONGLET PK1 / PK2
+    // ============================================================
+
+    function showTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+
+        document.querySelector(`.tab[onclick="showTab('${tab}')"]`).classList.add('active');
+        document.getElementById(tab).classList.remove('hidden');
+    }
+</script>
 
 </body>
 </html>
